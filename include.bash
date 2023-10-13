@@ -144,6 +144,7 @@ install-services() {
         mkdir --parents "${_user_services}"
         cp --verbose --target-directory "${_user_services}" "${_timer}"
         systemctl --user enable "${_timer}"
+        systemctl --user start "${_timer}"
     done < <(git ls-files -z '*.timer')
 
     systemctl --user start "${_app}"
