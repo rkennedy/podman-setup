@@ -1,0 +1,147 @@
+readonly tailscale_image_base=docker.io/tailscale/tailscale
+readonly tailscale_image_version=v1.50.1
+
+# Create a volume if it doesn't exist.
+# Arguments:
+# 1. name of the application. Applied as a label on the volume.
+# 2. name of the volume
+# 3. volume role. Applied as a label on the volume.
+ensure-volume() {
+    local -r _app="$1"
+    local -r _name="$2"
+    local -r _role="$3"
+    if ! podman volume exists "${_name}"; then
+        podman volume create --label app="${_app}" --label role="${_role}" "${_name}"
+    fi
+}
+
+# Pull an image if it's not already present. Tag it as the _current_ image.
+# Arguments:
+# 1. The name of the image.
+# 2. The image's tag. Usually a version.
+ensure-image() {
+    local -r _base="$1"
+    local -r _version="$2"
+    if ! podman image exists "${_base}:${_version}"; then
+        podman image pull "${_base}:${_version}"
+    fi
+    podman image tag "${_base}:${_version}" "${_base}:current"
+}
+
+# Create a container if it doesn't exist.
+# Arguments:
+# 1. The name of the container
+# 2-N. Additional arguments for `podman container create`. This should include
+#    the image name as the final item.
+ensure-container() {
+    local -r _name="$1"
+    shift
+    if ! podman container exists "${_name}"; then
+        podman container create --name "${_name}" "$@"
+    fi
+}
+
+# Create a pod if it doesn't exist.
+# Arguments:
+# 1. The name of the application.
+# 2. The friendly name of the application. sed in Systemd service label.
+# 3-N. Any additional arguments for `podman pod create`, such as which ports to
+#    publish.
+ensure-pod() {
+    local -r _app="$1"
+    local -r _app_friendly_name="$2"
+    shift 2
+
+    if ! podman pod exists "${_app}"; then
+        local -r _pod_args=(
+            --label app="${_app}"
+            --name "${_app}"
+            --infra
+            --infra-name "${_app}"-infra
+            "$@"
+        )
+        podman pod create "${_pod_args[@]}"
+    fi
+    printf '[Unit]\nDescription=%s\n' "${_app_friendly_name}" > "${script_dir}/${_app}.description.conf"
+}
+
+# Add a Tailscale sidecar to an app's pod. This creates a volume to hold
+# Tailscale's persistent data, and adds a container to the pod.
+# Arguments:
+# 1. The name of the application. This is also the name of the pod and the name
+#    of the Tailscale node.
+# 2. A Tailscale authorization key.
+# 3. The friendly name of the app. Used in Systemd service label.
+add-tailscale() {
+    local -r _app="$1"
+    local -r _auth_key="$2"
+    local -r _app_friendly_name="$3"
+
+    local -r _volume="data-${_app}-tailscale"
+
+    local -r _args=(
+        # Associate the sidecar with the given application pod.
+        --label app="${_app}"
+        --pod "${_app}"
+        # The Tailscale node name matches the application name.
+        --hostname "${_app}"
+
+        --log-opt tag=TAIL
+        --rm
+        --env TS_AUTHKEY="${_auth_key}"
+
+        # Tailscale requires storage and a tunneling device.
+        --env TS_STATE_DIR=/ts-state
+        --volume "${_volume}":/ts-state:rw
+        --device /dev/net/tun
+
+        "${tailscale_image_base}:current"
+    )
+
+    ensure-volume "${_app}" "${_volume}" data
+
+    ensure-image "${tailscale_image_base}" "${tailscale_image_version}"
+
+    ensure-container "${_app}-tailscale" "${_args[@]}"
+
+    printf '[Unit]\nDescription=%s Tailscale sidecar\n' "${_app_friendly_name}" > "${script_dir}/${_app}-tailscale.description.conf"
+}
+
+# Generate .service files for all the application's containers.
+# Arguments:
+# 1. The name of the application. If this refers to a pod, then all the pod's
+#    containers are processed, producing a .service file for each of them. If
+#    the name refers to a container, then only that container is processed.
+generate-systemd() {
+    local -r _app="$1"
+
+    podman generate systemd --new --name --files --container-prefix '' --pod-prefix '' "${_app}"
+}
+
+# Copy Systemd files to their installed location and activate the service. If
+# there are any .conf files in the repo whose names start the same as any
+# services, they are copied to a corresponding .d directory. (Useful for
+# overriding the service description, which Podman always fills in with a
+# generic name.
+# Arguments:
+# 1. The name of the application.
+install-services() {
+    local -r _app="$1"
+
+    local -r _user_services="${HOME}/.config/systemd/user"
+
+    while IFS= read -r -d $'\0' _service; do
+        mkdir --parents "${_user_services}"
+        cp --verbose --target-directory "${_user_services}" "${_service}"
+        local _service_name="${_service%.*}"
+        while IFS= read -r -d $'\0' _conf; do
+            mkdir --parents "${_user_services}/${_service_name}.service.d"
+            cp --verbose --target-directory "${_user_services}/${_service_name}.service.d" "${_conf}"
+        done < <(git ls-files -z "${_service_name}.*.conf")
+        systemctl --user enable "${_service_name}"
+    done < <(git ls-files -z '*.service')
+
+    systemctl --user start "${_app}"
+}
+
+# vim: set et sw=4:
