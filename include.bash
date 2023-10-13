@@ -140,6 +140,11 @@ install-services() {
         done < <(git ls-files -z "${_service_name}.*.conf")
         systemctl --user enable "${_service_name}"
     done < <(git ls-files -z '*.service')
+    while IFS= read -r -d $'\0' _timer; do
+        mkdir --parents "${_user_services}"
+        cp --verbose --target-directory "${_user_services}" "${_timer}"
+        systemctl --user enable "${_timer}"
+    done < <(git ls-files -z '*.timer')
 
     systemctl --user start "${_app}"
 }
