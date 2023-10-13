@@ -70,11 +70,11 @@ ensure-pod() {
 # Arguments:
 # 1. The name of the application. This is also the name of the pod and the name
 #    of the Tailscale node.
-# 2. A Tailscale authorization key.
+# 2. The name of a Podman secret that holds a Tailscale authorization key.
 # 3. The friendly name of the app. Used in Systemd service label.
 add-tailscale() {
     local -r _app="$1"
-    local -r _auth_key="$2"
+    local -r _auth_key_secret="$2"
     local -r _app_friendly_name="$3"
 
     local -r _volume="data-${_app}-tailscale"
@@ -88,7 +88,7 @@ add-tailscale() {
 
         --log-opt tag=TAIL
         --rm
-        --env TS_AUTHKEY="${_auth_key}"
+        --secret "${_auth_key_secret}",type=env,target=TS_AUTHKEY
 
         # Tailscale requires storage and a tunneling device.
         --env TS_STATE_DIR=/ts-state
