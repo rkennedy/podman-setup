@@ -147,7 +147,9 @@ install-services() {
         systemctl --user start "${_timer}"
     done < <(git ls-files -z '*.timer')
 
-    systemctl --user start "${_app}"
+    if systemctl --user list-unit-files "${_app}.service" >/dev/null; then
+        systemctl --user start "${_app}"
+    fi
 }
 
 # vim: set et sw=4:
