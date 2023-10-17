@@ -1,7 +1,7 @@
 # Podman setup
 
 This is a collection of functions to help deploying Podman containers as
-Systemd services.
+Systemd services and then running regular backups of their data..
 
 # Conventions
 
