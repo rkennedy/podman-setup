@@ -42,69 +42,95 @@ ensure-container() {
 }
 
 # Create a pod if it doesn't exist.
-# Arguments:
-# 1. The name of the application.
-# 2. The friendly name of the application. sed in Systemd service label.
-# 3-N. Any additional arguments for `podman pod create`, such as which ports to
-#    publish.
+# Options:
+# -a, --app APP  Use APP for the application name. Required.
+# -n, --name N   The friendly name of the application. sed in Systemd service
+#                label.
+# -t, --tailscale SECRET  Include a Tailscale sidecar. An authorization key
+#                should be in a secret named SECRET. This creates a volume to
+#                hold Tailscale's persistent data, and adds a container to the
+#                pod.
+#
+# Additional arguments for `podman pod create`, such as which ports to publish,
+# should follow a "--" argument..
 ensure-pod() {
-    local -r _app="$1"
-    local -r _app_friendly_name="$2"
-    shift 2
+    local -r _args=$(getopt -o a:n:t: --long app:,name:,tailscale: --name ensure-pod -- "$@")
+    eval set -- "${_args}"
+    while :; do
+        case "$1" in
+            -a|--app)
+                local -r _app="$2"
+                shift
+                ;;
+            -n|--name)
+                local -r _app_friendly_name="$2"
+                shift
+                ;;
+            -t|--tailscale)
+                local -r _ts_auth_key_secret="$2"
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                break
+                ;;
+        esac
+        shift
+    done
 
     if ! podman pod exists "${_app}"; then
-        local -r _pod_args=(
+        local _pod_args=(
             --label app="${_app}"
             --name "${_app}"
             --infra
             --infra-name "${_app}"-infra
+        )
+        if [[ -n "${_ts_auth_key_secret}" ]]; then
+            _pod_args+=(
+                --dns 100.100.100.100
+                --dns-search "$(tailscale status --json | jq -r '.MagicDNSSuffix')"
+            )
+        fi
+        _pod_args+=(
             "$@"
         )
         podman pod create "${_pod_args[@]}"
     fi
     printf '[Unit]\nDescription=%s\n' "${_app_friendly_name}" > "${script_dir}/${_app}.description.conf"
-}
 
-# Add a Tailscale sidecar to an app's pod. This creates a volume to hold
-# Tailscale's persistent data, and adds a container to the pod.
-# Arguments:
-# 1. The name of the application. This is also the name of the pod and the name
-#    of the Tailscale node.
-# 2. The name of a Podman secret that holds a Tailscale authorization key.
-# 3. The friendly name of the app. Used in Systemd service label.
-add-tailscale() {
-    local -r _app="$1"
-    local -r _auth_key_secret="$2"
-    local -r _app_friendly_name="$3"
+    if [[ -n "${_ts_auth_key_secret}" ]]; then
+        local -r _volume="data-${_app}-tailscale"
 
-    local -r _volume="data-${_app}-tailscale"
+        local -r _ts_args=(
+            # Associate the sidecar with the given application pod.
+            --label app="${_app}"
+            --pod "${_app}"
+            # The Tailscale node name matches the application name.
+            --hostname "${_app}"
 
-    local -r _args=(
-        # Associate the sidecar with the given application pod.
-        --label app="${_app}"
-        --pod "${_app}"
-        # The Tailscale node name matches the application name.
-        --hostname "${_app}"
+            --log-opt tag=TAIL
+            --rm
+            --secret "${_ts_auth_key_secret}",type=env,target=TS_AUTHKEY
 
-        --log-opt tag=TAIL
-        --rm
-        --secret "${_auth_key_secret}",type=env,target=TS_AUTHKEY
+            # Tailscale requires storage and a tunneling device.
+            --env TS_STATE_DIR=/ts-state
+            --volume "${_volume}":/ts-state:rw
+            --device /dev/net/tun
 
-        # Tailscale requires storage and a tunneling device.
-        --env TS_STATE_DIR=/ts-state
-        --volume "${_volume}":/ts-state:rw
-        --device /dev/net/tun
+            "${tailscale_image_base}:current"
+        )
 
-        "${tailscale_image_base}:current"
-    )
+        ensure-volume "${_app}" "${_volume}" data
 
-    ensure-volume "${_app}" "${_volume}" data
+        ensure-image "${tailscale_image_base}" "${tailscale_image_version}"
 
-    ensure-image "${tailscale_image_base}" "${tailscale_image_version}"
+        ensure-container "${_app}-tailscale" "${_ts_args[@]}"
 
-    ensure-container "${_app}-tailscale" "${_args[@]}"
-
-    printf '[Unit]\nDescription=%s Tailscale sidecar\n' "${_app_friendly_name}" > "${script_dir}/${_app}-tailscale.description.conf"
+        printf '[Unit]\nDescription=%s Tailscale sidecar\n' "${_app_friendly_name}" > "${script_dir}/${_app}-tailscale.description.conf"
+    fi
 }
 
 # Generate .service files for all the application's containers.
