@@ -178,4 +178,18 @@ install-services() {
     fi
 }
 
+install-quadlet() {
+    local -r _app="$1"
+    local -r _destination="${XDG_CONFIG_HOME-${HOME}/.config}"/containers/systemd/"${_app}"
+
+    systemctl --user stop "${_app}" || true
+
+    mapfile -d $'\0' _files < <(git ls-files -z -- '*.container' '*.volume' '*.network' '*.service' '*.timer')
+    # TODO Delete files that aren't on the list.
+    install --verbose --mode 0644 -D --target-directory "${_destination}" "${_files[@]}"
+
+    systemctl --user daemon-reload
+    systemctl --user start "${_app}"
+}
+
 # vim: set et sw=4:
