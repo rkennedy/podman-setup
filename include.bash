@@ -169,8 +169,7 @@ install-services() {
     while IFS= read -r -d $'\0' _timer; do
         mkdir --parents "${_user_services}"
         cp --verbose --target-directory "${_user_services}" "${_timer}"
-        systemctl --user enable "${_timer}"
-        systemctl --user start "${_timer}"
+        systemctl --user enable --now "${_timer}"
     done < <(git ls-files -z '*.timer')
 
     if systemctl --user list-unit-files "${_app}.service" >/dev/null; then
@@ -180,17 +179,21 @@ install-services() {
 
 install-quadlet() {
     local -r _app="$1"
-    local -r _destination="${XDG_CONFIG_HOME-${HOME}/.config}"/containers/systemd/"${_app}"
+    local -r _quadlet_destination="${XDG_CONFIG_HOME-${HOME}/.config}"/containers/systemd/"${_app}"
+    local -r _service_destination="${XDG_CONFIG_HOME-${HOME}/.config}"/systemd/user
 
     systemctl --user stop "${_app}" || true
 
-    mapfile -d $'\0' _files < <(git ls-files -z -- '*.container' '*.volume' '*.network' '*.service' '*.timer')
+    mapfile -d '' _files < <(git ls-files -z -- '*.container' '*.volume' '*.network')
+    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service')
     # TODO Delete files that aren't on the list.
-    install --verbose --mode 0644 -D --target-directory "${_destination}" "${_files[@]}"
+    install --verbose --mode 0644 -D --target-directory "${_quadlet_destination}" "${_files[@]}"
+    ${_services+install --verbose --mode 0644 -D --target-directory "${_service_destination}" "${_services[@]}"}
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
     systemctl --user start "${_app}"
+    ${_services+systemctl --user enable --now "${_services[@]}"}
 }
 
 # vim: set et sw=4:
