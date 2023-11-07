@@ -186,7 +186,7 @@ install-quadlet() {
 
     mapfile -d $'\0' _files < <(git ls-files -z -- '*.container' '*.volume' '*.network' '*.service' '*.timer')
     # TODO Delete files that aren't on the list.
-    install --verbose --mode 0644 -D --target-directory "${_destination}" "${_files[@]}"
+    install --verbose --compare --mode 0644 -D --target-directory "${_destination}" "${_files[@]}"
 
     systemctl --user daemon-reload
     systemctl --user start "${_app}"
