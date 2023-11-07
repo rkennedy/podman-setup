@@ -188,6 +188,7 @@ install-quadlet() {
     # TODO Delete files that aren't on the list.
     install --verbose --mode 0644 -D --target-directory "${_destination}" "${_files[@]}"
 
+    /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
     systemctl --user start "${_app}"
 }
