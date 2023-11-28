@@ -209,7 +209,7 @@ install-files() {
         fi
     fi
     if (( ${#_files[@]} )); then
-        install --verbose --mode 0644 --compare -D --target-directory "${_destination}" "${_files[@]}"
+        install --verbose --compare --mode 0644 -D --target-directory "${_destination}" "${_files[@]}"
     fi
 }
 
