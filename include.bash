@@ -177,6 +177,42 @@ install-services() {
     fi
 }
 
+install-files() {
+    local _delete=false
+    local -r _args=$(getopt -o d --long delete --name install-files -- "$@")
+    eval set -- "${_args}"
+    while :; do
+        case "$1" in
+            -d|--delete)
+                _delete=:
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                break
+                ;;
+        esac
+        shift
+    done
+
+    local -r _destination=${1}
+    shift
+    mapfile -d '' _files < <(git ls-files -z -- "$@" | sort --zero-terminated)
+    mapfile -d '' _existing_files < <(find "${_destination}" -type f -printf '%P\0' | sort --zero-terminated)
+
+    if ${_delete}; then
+        mapfile -d '' _files_to_remove < <(comm --zero-terminated -13 <(printf '%s\0' "${_files[@]}") <(printf '%s\0' "${_existing_files[@]}"))
+        if (( ${#_files_to_remove[@]} )); then
+            (cd "${_destination}" && rm --verbose --force -- "${_files_to_remove[@]}")
+        fi
+    fi
+    if (( ${#_files[@]} )); then
+        install --verbose --mode 0644 --compare -D --target-directory "${_destination}" "${_files[@]}"
+    fi
+}
+
 install-quadlet() {
     local -r _app="$1"
     local -r _quadlet_destination="${XDG_CONFIG_HOME-${HOME}/.config}"/containers/systemd/"${_app}"
@@ -184,16 +220,17 @@ install-quadlet() {
 
     systemctl --user stop "${_app}" || true
 
-    mapfile -d '' _files < <(git ls-files -z -- '*.container' '*.volume' '*.network')
-    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service')
-    # TODO Delete files that aren't on the list.
-    install --verbose --mode 0644 -D --target-directory "${_quadlet_destination}" "${_files[@]}"
-    ${_services+install --verbose --mode 0644 -D --target-directory "${_service_destination}" "${_services[@]}"}
+    install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network'
+    install-files "${_service_destination}" '*.timer' '*.service'
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
     systemctl --user start "${_app}"
-    ${_services+systemctl --user enable --now "${_services[@]}"}
+
+    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service')
+    if (( ${#_services[@]} )); then
+        systemctl --user enable --now "${_services[@]}"
+    fi
 }
 
 # vim: set et sw=4:
