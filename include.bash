@@ -200,9 +200,13 @@ install-files() {
     local -r _destination=${1}
     shift
     mapfile -d '' _files < <(git ls-files -z -- "$@" | sort --zero-terminated)
-    mapfile -d '' _existing_files < <(find "${_destination}" -type f -printf '%P\0' | sort --zero-terminated)
+    if [ -d "${_destination}" ]; then
+        mapfile -d '' _existing_files < <(find "${_destination}" -type f -printf '%P\0' | sort --zero-terminated)
+    else
+        local _existing_files=()
+    fi
 
-    if ${_delete}; then
+    if ${_delete} && (( ${#_existing_files[@]} )); then
         mapfile -d '' _files_to_remove < <(comm --zero-terminated -13 <(printf '%s\0' "${_files[@]}") <(printf '%s\0' "${_existing_files[@]}"))
         if (( ${#_files_to_remove[@]} )); then
             (cd "${_destination}" && rm --verbose --force -- "${_files_to_remove[@]}")
