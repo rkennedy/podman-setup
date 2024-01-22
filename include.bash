@@ -224,7 +224,7 @@ install-quadlet() {
 
     systemctl --user stop "${_app}" || true
 
-    install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network'
+    install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network' '*.kube'
     install-files "${_service_destination}" '*.timer' '*.service'
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
