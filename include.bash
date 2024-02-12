@@ -15,6 +15,28 @@ ensure-volume() {
     fi
 }
 
+# Create and populate a secret if it doesn't exist.
+# Arguments:
+# 1. name of the application. Applied as a label on the secret.
+# 2. name of the secret
+# 3. name of the file that holds the secret's contents
+# 4. secret role. Applied as a label on the secret.
+ensure-secret() {
+    local -r _app="$1"
+    local -r _name="$2"
+    local -r _source="$3"
+    local -r _role="$4"
+    if ! podman secret exists "${_name}"; then
+        test -f "${_source}"
+        local -r secret_args=(
+            --driver file
+            --label app="${_app}"
+            --label role="${_role}"
+        )
+        printf '%s' $(< ${_source}) | podman secret create "${secret_args[@]}" "${_name}" -
+    fi
+}
+
 # Pull an image if it's not already present. Tag it as the _current_ image.
 # Arguments:
 # 1. The name of the image.
