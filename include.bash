@@ -244,14 +244,20 @@ install-quadlet() {
     local -r _quadlet_destination="${XDG_CONFIG_HOME-${HOME}/.config}"/containers/systemd/"${_app}"
     local -r _service_destination="${XDG_CONFIG_HOME-${HOME}/.config}"/systemd/user
 
-    systemctl --user stop "${_app}" || true
+    if git ls-files '*.pod' | grep -q pod; then
+        local -r _service="${_app}-pod"
+    else
+        local -r _service="${_app}"
+    fi
 
-    install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network' '*.kube'
+    systemctl --user stop "${_service}" || true
+
+    install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network' '*.kube' '*.pod'
     install-files "${_service_destination}" '*.timer' '*.service'
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
-    systemctl --user start "${_app}"
+    systemctl --user start "${_service}"
 
     mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service')
     if (( ${#_services[@]} )); then
