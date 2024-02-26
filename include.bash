@@ -1,5 +1,5 @@
-readonly tailscale_image_base=docker.io/tailscale/tailscale
-readonly tailscale_image_version=v1.50.1
+readonly tailscale_image_base=ghcr.io/tailscale/tailscale
+readonly tailscale_image_version=v1.58.2
 
 # Create a volume if it doesn't exist.
 # Arguments:
