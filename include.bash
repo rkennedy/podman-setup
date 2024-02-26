@@ -27,7 +27,7 @@ ensure-secret() {
     local -r _source="$3"
     local -r _role="$4"
     if ! podman secret exists "${_name}"; then
-        test -f "${_source}"
+        test -f "${_source}" || test -p "${_source}"
         local -r secret_args=(
             --driver file
             --label app="${_app}"
