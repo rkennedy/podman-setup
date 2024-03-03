@@ -37,6 +37,50 @@ ensure-secret() {
     fi
 }
 
+# Create a Kubernetes-style secret for use with `podman kube play`.
+# Arguments:
+# 1. name of the application. Applied as a label on the secret.
+# 2. name of the secret
+# 3. secret role. Applied as a label on the secret.
+# 4,5,…. names and values of the secret components.
+ensure-kube-secret() {
+    local -r _app="${1}"
+    local -r _name="${2}"
+    local -r _role="${3}"
+    shift 3
+    if podman secret exists "${_name}"; then
+        return
+    fi
+
+    local -r _secret_args=(
+        --driver file
+        --label app="${_app}"
+        --label role="${_role}"
+    )
+    local _json_args=(
+        --null-input
+        --arg app "${_app}"
+        --arg name "${_name}"
+        --args
+    )
+    jq "${_json_args[@]}" '{
+        kind: "Secret",
+        apiVersion: "v1",
+        metadata: {
+            name: $name,
+            labels: {
+                app: $app
+            }
+        },
+        data: [
+            # Iterate over pairs of name/value positional arguments.
+            range(0; $ARGS.positional | length; 2) | {
+                ($ARGS.positional[.]): $ARGS.positional[. + 1] | @base64
+            }
+        ] | add
+    }' "$@" | podman secret create "${_secret_args[@]}" "${_name}" -
+}
+
 # Pull an image if it's not already present. Tag it as the _current_ image.
 # Arguments:
 # 1. The name of the image.
