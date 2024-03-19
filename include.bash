@@ -1,5 +1,4 @@
 readonly tailscale_image_base=ghcr.io/tailscale/tailscale
-readonly tailscale_image_version=v1.58.2
 
 # Create a volume if it doesn't exist.
 # Arguments:
@@ -191,7 +190,10 @@ ensure-pod() {
 
         ensure-volume "${_app}" "${_volume}" data
 
-        ensure-image "${tailscale_image_base}" "${tailscale_image_version}"
+        if ! podman image exists "${tailscale_image_base}:current"; then
+            >&2 printf 'Tailscale image (%s) is not present. Use get-tailscale.bash to fetch it.\n' "${tailscale_image_base}:current"
+            return 1
+        fi
 
         ensure-container "${_app}-tailscale" "${_ts_args[@]}"
 
