@@ -43,4 +43,4 @@ if [ -z "${tailscale_image_version}" ]; then
     printf 'Fetching latest version %s\n' "${tailscale_image_version}"
 fi
 
-ensure-image "${tailscale_image_base}" "${tailscale_image_version}"
+ensure-image current "${tailscale_image_base}" "${tailscale_image_version}"

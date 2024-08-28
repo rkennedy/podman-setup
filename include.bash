@@ -85,12 +85,13 @@ ensure-kube-secret() {
 # 1. The name of the image.
 # 2. The image's tag. Usually a version.
 ensure-image() {
-    local -r _base="$1"
-    local -r _version="$2"
+    local -r _app="$1"
+    local -r _base="$2"
+    local -r _version="$3"
     if ! podman image exists "${_base}:${_version}"; then
         podman image pull "${_base}:${_version}"
     fi
-    podman image tag "${_base}:${_version}" "${_base}:current"
+    podman image tag "${_base}:${_version}" "${_base}:${_app}"
 }
 
 # Create a container if it doesn't exist.
