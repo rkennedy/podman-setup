@@ -31,12 +31,28 @@ create-staging() {
 # Arguments:
 # 1. The name of the staging directory created by create-staging.
 upload-backup() {
+    eval set -- $(getopt --name upload-backup --options h --longoptions with-host -- "$@")
+    local withhost=
+    for opt; do
+        case "$opt" in
+            -h|--with-host)
+                withhost=t
+                shift 1
+                ;;
+            --)
+                shift 1
+                break
+                ;;
+        esac
+    done
+    readonly withhost
     local -r _staging="$1"
 
     local -r _app=$(basename "${_staging}")
     local -r _workdir=$(dirname "${_staging}")
 
-    tar --create --verbose --file "${_workdir}/${_app}.tar.gz" --gzip --directory "${_workdir}" "${_app}"
+    local -r _tarname="${_app}${withhost:+-$(hostname)}"
+    tar --create --verbose --file "${_workdir}/${_tarname}.tar.gz" --gzip --directory "${_workdir}" "${_app}"
 
     local -r _backup_args=(
         --rm
@@ -44,7 +60,9 @@ upload-backup() {
         --volume "${config_volume}":/config/rclone:rw
         --volume "${_workdir}":/data:ro
         "${rclone}"
-        copy "/data/${_app}.tar.gz" gdrive:Backups --progress -vvvv
+        copy "/data/${_tarname}.tar.gz" gdrive:Backups --progress -vvvv
     )
     podman run "${_backup_args[@]}"
 }
+
+# vim: et sw=4:
