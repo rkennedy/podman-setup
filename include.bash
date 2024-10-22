@@ -18,21 +18,20 @@ ensure-volume() {
 # Arguments:
 # 1. name of the application. Applied as a label on the secret.
 # 2. name of the secret
-# 3. name of the file that holds the secret's contents
-# 4. secret role. Applied as a label on the secret.
+# 3. secret role. Applied as a label on the secret.
+# The secret contents are read from stdin.
 ensure-secret() {
     local -r _app="$1"
     local -r _name="$2"
-    local -r _source="$3"
-    local -r _role="$4"
+    local -r _role="$3"
     if ! podman secret exists "${_name}"; then
-        test -f "${_source}" || test -p "${_source}"
         local -r secret_args=(
             --driver file
             --label app="${_app}"
             --label role="${_role}"
         )
-        printf '%s' $(< ${_source}) | podman secret create "${secret_args[@]}" "${_name}" -
+        # Read from stdin.
+        podman secret create "${secret_args[@]}" "${_name}" -
     fi
 }
 
