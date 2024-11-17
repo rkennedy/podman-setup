@@ -299,13 +299,13 @@ install-quadlet() {
     systemctl --user stop "${_service}" || true
 
     install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network' '*.kube' '*.pod'
-    install-files "${_service_destination}" '*.timer' '*.service'
+    install-files "${_service_destination}" '*.timer' '*.service' '*.socket'
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
     systemctl --user start "${_service}"
 
-    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service')
+    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service' '*.socket')
     if (( ${#_services[@]} )); then
         systemctl --user enable --now "${_services[@]}"
     fi
