@@ -31,7 +31,7 @@ ensure-secret() {
             --label role="${_role}"
         )
         # Read from stdin.
-        podman secret create "${secret_args[@]}" "${_name}" -
+        cat | podman secret create "${secret_args[@]}" "${_name}" -
     fi
 }
 
