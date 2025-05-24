@@ -20,11 +20,11 @@ ensure-volume() {
 # 2. name of the secret
 # 3. secret role. Applied as a label on the secret.
 # The secret contents are read from stdin.
-ensure-secret() {
+ensure-secret() (
     local -r _app="$1"
     local -r _name="$2"
     local -r _role="$3"
-    if ! podman secret exists "${_name}"; then
+    if ! podman secret exists "${_name}" </dev/null; then
         local -r secret_args=(
             --driver file
             --label app="${_app}"
@@ -33,7 +33,7 @@ ensure-secret() {
         # Read from stdin.
         cat | podman secret create "${secret_args[@]}" "${_name}" -
     fi
-}
+)
 
 # Create a Kubernetes-style secret for use with `podman kube play`.
 # Arguments:
