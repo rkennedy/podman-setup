@@ -305,9 +305,22 @@ install-quadlet() {
     systemctl --user daemon-reload
     systemctl --user start "${_service}"
 
-    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service' '*.socket')
-    if (( ${#_services[@]} )); then
-        systemctl --user enable --now "${_services[@]}"
+    # Enable all timers and sockets, and all services that aren't already
+    # managed by timers.
+    mapfile -d '' _timers < <(git ls-files -z -- '*.timer')
+    local _all=("${_timers[@]}")
+    while IFS= read -r -d $'\0' _this; do
+        for _timer in "${_timers[@]}"; do
+            if [[ ${_timer%.timer} != ${_this%.service} ]]; then
+                _all+=("${_this}")
+                break
+            fi
+        done
+    done < <(git ls-files -z '*.service')
+    mapfile -d '' _sockets < <(git ls-files -z -- '*.socket')
+
+    if (( ${#_all[@]} )) || (( ${#_sockets[@]} )); then
+        systemctl --user enable --now "${_all[@]}" "${_sockets[@]}"
     fi
 }
 
