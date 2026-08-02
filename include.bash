@@ -303,7 +303,9 @@ install-quadlet() {
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
-    systemctl --user start "${_service}"
+    if systemctl --user list-unit-files "${_service}.service" >/dev/null; then
+        systemctl --user start "${_service}"
+    fi
 
     # Enable all timers and sockets, and all services that aren't already
     # managed by timers.
