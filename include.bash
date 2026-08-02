@@ -18,23 +18,22 @@ ensure-volume() {
 # Arguments:
 # 1. name of the application. Applied as a label on the secret.
 # 2. name of the secret
-# 3. name of the file that holds the secret's contents
-# 4. secret role. Applied as a label on the secret.
-ensure-secret() {
+# 3. secret role. Applied as a label on the secret.
+# The secret contents are read from stdin.
+ensure-secret() (
     local -r _app="$1"
     local -r _name="$2"
-    local -r _source="$3"
-    local -r _role="$4"
-    if ! podman secret exists "${_name}"; then
-        test -f "${_source}" || test -p "${_source}"
+    local -r _role="$3"
+    if ! podman secret exists "${_name}" </dev/null; then
         local -r secret_args=(
             --driver file
             --label app="${_app}"
             --label role="${_role}"
         )
-        printf '%s' $(< ${_source}) | podman secret create "${secret_args[@]}" "${_name}" -
+        # Read from stdin.
+        cat | podman secret create "${secret_args[@]}" "${_name}" -
     fi
-}
+)
 
 # Create a Kubernetes-style secret for use with `podman kube play`.
 # Arguments:
@@ -300,15 +299,30 @@ install-quadlet() {
     systemctl --user stop "${_service}" || true
 
     install-files "${_quadlet_destination}" --delete '*.container' '*.volume' '*.network' '*.kube' '*.pod'
-    install-files "${_service_destination}" '*.timer' '*.service'
+    install-files "${_service_destination}" '*.timer' '*.service' '*.socket'
 
     /usr/local/lib/systemd/system-generators/podman-system-generator -dryrun -user >/dev/null
     systemctl --user daemon-reload
-    systemctl --user start "${_service}"
+    if systemctl --user list-unit-files "${_service}.service" >/dev/null; then
+        systemctl --user start "${_service}"
+    fi
 
-    mapfile -d '' _services < <(git ls-files -z -- '*.timer' '*.service')
-    if (( ${#_services[@]} )); then
-        systemctl --user enable --now "${_services[@]}"
+    # Enable all timers and sockets, and all services that aren't already
+    # managed by timers.
+    mapfile -d '' _timers < <(git ls-files -z -- '*.timer')
+    local _all=("${_timers[@]}")
+    while IFS= read -r -d $'\0' _this; do
+        for _timer in "${_timers[@]}"; do
+            if [[ ${_timer%.timer} != ${_this%.service} ]]; then
+                _all+=("${_this}")
+                break
+            fi
+        done
+    done < <(git ls-files -z '*.service')
+    mapfile -d '' _sockets < <(git ls-files -z -- '*.socket')
+
+    if (( ${#_all[@]} )) || (( ${#_sockets[@]} )); then
+        systemctl --user enable --now "${_all[@]}" "${_sockets[@]}"
     fi
 }
 
